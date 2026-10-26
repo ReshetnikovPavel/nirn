@@ -6,10 +6,10 @@ use iced::futures::channel::mpsc::Sender;
 use iced::futures::sink::SinkExt;
 use iced::futures::{Stream, StreamExt};
 use iced::stream;
+use zbus::Connection;
 use zbus::fdo::PropertiesProxy;
 use zbus::proxy;
 use zbus::proxy::CacheProperties;
-use zbus::Connection;
 
 const SERVICE: &str = "org.freedesktop.UPower";
 const DEVICE_PATH: &str = "/org/freedesktop/UPower/devices/DisplayDevice";
@@ -129,10 +129,7 @@ async fn watch(output: &mut Sender<Update>) -> Result<(), Error> {
     Err(Error::new("UPower stopped sending property updates"))
 }
 
-async fn forward(
-    output: &mut Sender<Update>,
-    device: &UpowerDeviceProxy<'_>,
-) -> Result<(), Error> {
+async fn forward(output: &mut Sender<Update>, device: &UpowerDeviceProxy<'_>) -> Result<(), Error> {
     match read(device).await {
         Ok(update) => output
             .send(Ok(update))

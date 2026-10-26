@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use iced::widget::{column, row, text};
+use iced::widget::{column, container, mouse_area, row, space, stack, text};
 use iced::{Alignment, Color, Element, Font, Length, Subscription, Task as Command, time};
 use iced_layershell::application;
 use iced_layershell::reexport::{Anchor, Layer};
@@ -48,6 +48,7 @@ struct Bar {
     battery: String,
     keyboard_layout: String,
     workspaces: Vec<workspaces::Workspace>,
+    hovered: bool,
 }
 
 impl Default for Bar {
@@ -57,6 +58,7 @@ impl Default for Bar {
             battery: String::new(),
             keyboard_layout: String::new(),
             workspaces: Vec::new(),
+            hovered: false,
         }
     }
 }
@@ -68,6 +70,8 @@ enum Message {
     Battery(battery::Update),
     Keyboard(keyboard::Update),
     Workspaces(workspaces::Update),
+    MouseEnter,
+    MouseExit,
 }
 
 fn update(bar: &mut Bar, message: Message) -> Command<Message> {
@@ -108,6 +112,14 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
+        Message::MouseEnter => {
+            bar.hovered = true;
+            Command::none()
+        }
+        Message::MouseExit => {
+            bar.hovered = false;
+            Command::none()
+        }
         _ => unreachable!(),
     }
 }
@@ -131,10 +143,77 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     ]
     .align_x(Alignment::End)
     .width(Length::Fill);
-    row![left, center, right]
+    let content = row![left, center, right]
         .height(Length::Fill)
-        .align_y(Alignment::Center)
+        .align_y(Alignment::Center);
+
+    let hovered = bar.hovered;
+
+    let bar = stack![
+        container(content)
+            .padding(iced::Padding {
+                top: 4.0,
+                right: 6.0,
+                bottom: 0.0,
+                left: 6.0,
+            })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(bar_style),
+        container(space())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(move |theme| hover_border_style(theme, hovered)),
+    ]
+    .width(Length::Fill)
+    .height(Length::Fill);
+
+    // The border container is taller than the bar and shifted up so its top
+    // edge is clipped by the layer surface.
+    let bar = container(bar)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(iced::Padding {
+            top: -4.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        });
+
+    mouse_area(bar)
+        .on_enter(Message::MouseEnter)
+        .on_exit(Message::MouseExit)
         .into()
+}
+
+fn bar_style(theme: &iced::Theme) -> iced::widget::container::Style {
+    use iced::widget::container;
+
+    container::Style {
+        background: Some(theme.palette().background.scale_alpha(0.6).into()),
+        border: iced::border::Border {
+            radius: iced::border::bottom(12.0),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+fn hover_border_style(theme: &iced::Theme, hovered: bool) -> iced::widget::container::Style {
+    use iced::widget::container;
+
+    container::Style {
+        border: iced::border::Border {
+            color: if hovered {
+                theme.palette().primary
+            } else {
+                Color::TRANSPARENT
+            },
+            width: if hovered { 4.0 } else { 0.0 },
+            radius: iced::border::bottom(12.0),
+        },
+        ..Default::default()
+    }
 }
 
 fn workspace_view(workspace: &workspaces::Workspace) -> Element<'_, Message> {
@@ -158,7 +237,7 @@ fn workspace_color(workspace: &workspaces::Workspace) -> Color {
 fn style(_counter: &Bar, theme: &iced::Theme) -> iced::theme::Style {
     use iced::theme::Style;
     Style {
-        background_color: theme.palette().background.scale_alpha(0.9),
+        background_color: Color::TRANSPARENT,
         text_color: theme.palette().text,
     }
 }

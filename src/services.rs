@@ -25,10 +25,7 @@ pub fn workspace_label(workspace: &workspaces::Workspace) -> String {
 }
 
 pub fn battery(snapshot: &battery::Snapshot) -> String {
-    let battery::Snapshot {
-        status,
-        percentage,
-    } = *snapshot;
+    let battery::Snapshot { status, percentage } = *snapshot;
 
     let icon = if matches!(status, battery::Status::Charging) {
         match percentage {
