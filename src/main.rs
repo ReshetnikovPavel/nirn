@@ -10,6 +10,7 @@ mod battery;
 mod keyboard;
 mod services;
 pub mod theme;
+mod wifi;
 mod workspaces;
 
 const HEIGHT: u32 = 35;
@@ -39,6 +40,7 @@ fn subscription(_: &Bar) -> Subscription<Message> {
         time::every(Duration::from_secs(1)).map(|_| Message::Tick1s),
         Subscription::run(battery::updates).map(Message::Battery),
         Subscription::run(keyboard::updates).map(Message::Keyboard),
+        Subscription::run(wifi::updates).map(Message::Wifi),
         Subscription::run(workspaces::updates).map(Message::Workspaces),
     ])
 }
@@ -47,6 +49,7 @@ struct Bar {
     clock: String,
     battery: String,
     keyboard_layout: String,
+    wifi: String,
     workspaces: Vec<workspaces::Workspace>,
     hovered: bool,
 }
@@ -57,6 +60,7 @@ impl Default for Bar {
             clock: services::clock(),
             battery: String::new(),
             keyboard_layout: String::new(),
+            wifi: String::new(),
             workspaces: Vec::new(),
             hovered: false,
         }
@@ -69,6 +73,7 @@ enum Message {
     Tick1s,
     Battery(battery::Update),
     Keyboard(keyboard::Update),
+    Wifi(wifi::Update),
     Workspaces(workspaces::Update),
     MouseEnter,
     MouseExit,
@@ -102,6 +107,16 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
+        Message::Wifi(update) => {
+            bar.wifi = match update {
+                Ok(snapshot) => services::wifi(snapshot.as_ref()),
+                Err(error) => {
+                    eprintln!("{}", error);
+                    services::wifi(None)
+                }
+            };
+            Command::none()
+        }
         Message::Workspaces(update) => {
             bar.workspaces = match update {
                 Ok(snapshot) => snapshot.workspaces,
@@ -126,6 +141,7 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
 
 fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let clock = text(&bar.clock).center();
+    let wifi = text(&bar.wifi).center();
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
@@ -137,7 +153,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let center = column![clock].align_x(Alignment::Center);
 
     let right = column![
-        row![keyboard_layout, battery]
+        row![wifi, keyboard_layout, battery]
             .align_y(Alignment::Center)
             .spacing(12)
     ]

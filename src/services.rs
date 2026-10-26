@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{battery, keyboard, workspaces};
+use crate::{battery, keyboard, wifi, workspaces};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -22,6 +22,13 @@ pub fn workspace_label(workspace: &workspaces::Workspace) -> String {
         .name
         .clone()
         .unwrap_or_else(|| workspace.idx.to_string())
+}
+
+pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
+    match snapshot {
+        Some(snapshot) => format!("󰖩 {}", snapshot.ssid),
+        None => "󰖪".to_owned(),
+    }
 }
 
 pub fn battery(snapshot: &battery::Snapshot) -> String {
