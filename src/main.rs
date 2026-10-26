@@ -8,6 +8,7 @@ use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::to_layer_message;
 mod audio;
 mod battery;
+mod brightness;
 mod niri;
 mod services;
 pub mod theme;
@@ -40,6 +41,7 @@ fn subscription(_: &Bar) -> Subscription<Message> {
         time::every(Duration::from_secs(1)).map(|_| Message::Tick1s),
         Subscription::run(audio::updates).map(Message::Audio),
         Subscription::run(battery::updates).map(Message::Battery),
+        Subscription::run(brightness::updates).map(Message::Brightness),
         Subscription::run(niri::updates).map(Message::Niri),
         Subscription::run(wifi::updates).map(Message::Wifi),
     ])
@@ -49,6 +51,7 @@ struct Bar {
     clock: String,
     audio: String,
     battery: String,
+    brightness: String,
     keyboard_layout: String,
     wifi: String,
     workspaces: Vec<niri::Workspace>,
@@ -61,6 +64,7 @@ impl Default for Bar {
             clock: services::clock(),
             audio: services::audio(None),
             battery: String::new(),
+            brightness: services::brightness(None),
             keyboard_layout: String::new(),
             wifi: String::new(),
             workspaces: Vec::new(),
@@ -75,6 +79,7 @@ enum Message {
     Tick1s,
     Audio(audio::Update),
     Battery(battery::Update),
+    Brightness(brightness::Update),
     Niri(niri::Update),
     Wifi(wifi::Update),
     MouseEnter,
@@ -102,6 +107,16 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
                 Ok(Some(snapshot)) => services::battery(&snapshot),
                 // No battery, e.g. on a desktop machine.
                 Ok(None) => String::new(),
+                Err(error) => {
+                    eprintln!("{}", error);
+                    "Err".to_owned()
+                }
+            };
+            Command::none()
+        }
+        Message::Brightness(update) => {
+            bar.brightness = match update {
+                Ok(snapshot) => services::brightness(snapshot.as_ref()),
                 Err(error) => {
                     eprintln!("{}", error);
                     "Err".to_owned()
@@ -153,6 +168,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let clock = text(&bar.clock).center();
     let wifi = text(&bar.wifi).center();
     let audio = text(&bar.audio).center();
+    let brightness = text(&bar.brightness).center();
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
@@ -164,7 +180,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let center = column![clock].align_x(Alignment::Center);
 
     let right = column![
-        row![wifi, audio, keyboard_layout, battery]
+        row![wifi, audio, brightness, keyboard_layout, battery]
             .align_y(Alignment::Center)
             .spacing(12)
     ]

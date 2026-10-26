@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{audio, battery, niri, wifi};
+use crate::{audio, battery, brightness, niri, wifi};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -29,6 +29,21 @@ pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
         Some(snapshot) => format!("󰖩 {}", snapshot.ssid),
         None => "󰖪".to_owned(),
     }
+}
+
+pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> String {
+    let Some(snapshot) = snapshot else {
+        return String::new();
+    };
+
+    let icon = match snapshot.percentage {
+        0..=25 => "󰃝",
+        26..=50 => "󰃞",
+        51..=75 => "󰃟",
+        _ => "󰃠",
+    };
+
+    format!("{icon} {}%", snapshot.percentage)
 }
 
 pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
@@ -92,6 +107,21 @@ pub fn battery(snapshot: &battery::Snapshot) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_brightness_widget() {
+        let snapshot = |percentage| brightness::Snapshot { percentage };
+
+        assert_eq!(brightness(None), "");
+        assert_eq!(brightness(Some(&snapshot(0))), "󰃝 0%");
+        assert_eq!(brightness(Some(&snapshot(25))), "󰃝 25%");
+        assert_eq!(brightness(Some(&snapshot(26))), "󰃞 26%");
+        assert_eq!(brightness(Some(&snapshot(50))), "󰃞 50%");
+        assert_eq!(brightness(Some(&snapshot(51))), "󰃟 51%");
+        assert_eq!(brightness(Some(&snapshot(75))), "󰃟 75%");
+        assert_eq!(brightness(Some(&snapshot(76))), "󰃠 76%");
+        assert_eq!(brightness(Some(&snapshot(100))), "󰃠 100%");
+    }
 
     #[test]
     fn formats_audio_widget() {
