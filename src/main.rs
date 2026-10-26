@@ -6,12 +6,12 @@ use iced_layershell::application;
 use iced_layershell::reexport::{Anchor, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::to_layer_message;
+mod audio;
 mod battery;
-mod keyboard;
+mod niri;
 mod services;
 pub mod theme;
 mod wifi;
-mod workspaces;
 
 const HEIGHT: u32 = 35;
 
@@ -38,19 +38,20 @@ pub fn main() -> Result<(), iced_layershell::Error> {
 fn subscription(_: &Bar) -> Subscription<Message> {
     Subscription::batch([
         time::every(Duration::from_secs(1)).map(|_| Message::Tick1s),
+        Subscription::run(audio::updates).map(Message::Audio),
         Subscription::run(battery::updates).map(Message::Battery),
-        Subscription::run(keyboard::updates).map(Message::Keyboard),
+        Subscription::run(niri::updates).map(Message::Niri),
         Subscription::run(wifi::updates).map(Message::Wifi),
-        Subscription::run(workspaces::updates).map(Message::Workspaces),
     ])
 }
 
 struct Bar {
     clock: String,
+    audio: String,
     battery: String,
     keyboard_layout: String,
     wifi: String,
-    workspaces: Vec<workspaces::Workspace>,
+    workspaces: Vec<niri::Workspace>,
     hovered: bool,
 }
 
@@ -58,6 +59,7 @@ impl Default for Bar {
     fn default() -> Self {
         Self {
             clock: services::clock(),
+            audio: services::audio(None),
             battery: String::new(),
             keyboard_layout: String::new(),
             wifi: String::new(),
@@ -71,10 +73,10 @@ impl Default for Bar {
 #[derive(Debug, Clone)]
 enum Message {
     Tick1s,
+    Audio(audio::Update),
     Battery(battery::Update),
-    Keyboard(keyboard::Update),
+    Niri(niri::Update),
     Wifi(wifi::Update),
-    Workspaces(workspaces::Update),
     MouseEnter,
     MouseExit,
 }
@@ -83,6 +85,16 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
     match message {
         Message::Tick1s => {
             bar.clock = services::clock();
+            Command::none()
+        }
+        Message::Audio(update) => {
+            bar.audio = match update {
+                Ok(snapshot) => services::audio(Some(&snapshot)),
+                Err(error) => {
+                    eprintln!("{}", error);
+                    services::audio(None)
+                }
+            };
             Command::none()
         }
         Message::Battery(update) => {
@@ -97,14 +109,22 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
-        Message::Keyboard(update) => {
-            bar.keyboard_layout = match update {
-                Ok(snapshot) => services::keyboard_layout(&snapshot),
+        Message::Niri(update) => {
+            match update {
+                Ok(snapshot) => {
+                    bar.workspaces = snapshot.workspaces;
+                    bar.keyboard_layout = snapshot
+                        .keyboard
+                        .as_ref()
+                        .map(services::keyboard_layout)
+                        .unwrap_or_default();
+                }
                 Err(error) => {
                     eprintln!("{}", error);
-                    "Err".to_owned()
+                    bar.keyboard_layout = "Err".to_owned();
+                    bar.workspaces.clear();
                 }
-            };
+            }
             Command::none()
         }
         Message::Wifi(update) => {
@@ -113,16 +133,6 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
                 Err(error) => {
                     eprintln!("{}", error);
                     services::wifi(None)
-                }
-            };
-            Command::none()
-        }
-        Message::Workspaces(update) => {
-            bar.workspaces = match update {
-                Ok(snapshot) => snapshot.workspaces,
-                Err(error) => {
-                    eprintln!("{}", error);
-                    Vec::new()
                 }
             };
             Command::none()
@@ -142,6 +152,7 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
 fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let clock = text(&bar.clock).center();
     let wifi = text(&bar.wifi).center();
+    let audio = text(&bar.audio).center();
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
@@ -153,7 +164,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let center = column![clock].align_x(Alignment::Center);
 
     let right = column![
-        row![wifi, keyboard_layout, battery]
+        row![wifi, audio, keyboard_layout, battery]
             .align_y(Alignment::Center)
             .spacing(12)
     ]
@@ -232,13 +243,13 @@ fn hover_border_style(theme: &iced::Theme, hovered: bool) -> iced::widget::conta
     }
 }
 
-fn workspace_view(workspace: &workspaces::Workspace) -> Element<'_, Message> {
+fn workspace_view(workspace: &niri::Workspace) -> Element<'_, Message> {
     text(services::workspace_label(workspace))
         .color(workspace_color(workspace))
         .into()
 }
 
-fn workspace_color(workspace: &workspaces::Workspace) -> Color {
+fn workspace_color(workspace: &niri::Workspace) -> Color {
     let palette = theme::RosePine::MAIN;
 
     if workspace.is_urgent {

@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{battery, keyboard, wifi, workspaces};
+use crate::{audio, battery, niri, wifi};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -13,11 +13,11 @@ pub fn clock() -> String {
     format!("{hour:02}:{minute:02} | {month} {day:02}")
 }
 
-pub fn keyboard_layout(snapshot: &keyboard::Snapshot) -> String {
+pub fn keyboard_layout(snapshot: &niri::Keyboard) -> String {
     snapshot.short_name.clone()
 }
 
-pub fn workspace_label(workspace: &workspaces::Workspace) -> String {
+pub fn workspace_label(workspace: &niri::Workspace) -> String {
     workspace
         .name
         .clone()
@@ -29,6 +29,26 @@ pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
         Some(snapshot) => format!("󰖩 {}", snapshot.ssid),
         None => "󰖪".to_owned(),
     }
+}
+
+pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
+    let Some(snapshot) = snapshot else {
+        return "󰝟".to_owned();
+    };
+
+    let volume_icon = if snapshot.muted {
+        "󰝟"
+    } else {
+        match snapshot.volume {
+            0..=33 => "󰕿",
+            34..=66 => "󰖀",
+            _ => "󰕾",
+        }
+    };
+
+    let headphones = if snapshot.headphones { "󰋋 " } else { "" };
+
+    format!("{headphones}{volume_icon} {}%", snapshot.volume)
 }
 
 pub fn battery(snapshot: &battery::Snapshot) -> String {
@@ -67,4 +87,29 @@ pub fn battery(snapshot: &battery::Snapshot) -> String {
     };
 
     format!("{percentage:02}% {icon}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_audio_widget() {
+        let snapshot = |volume, muted, headphones| audio::Snapshot {
+            volume,
+            muted,
+            headphones,
+        };
+
+        assert_eq!(audio(Some(&snapshot(0, false, false))), "󰕿 0%");
+        assert_eq!(audio(Some(&snapshot(33, false, false))), "󰕿 33%");
+        assert_eq!(audio(Some(&snapshot(34, false, false))), "󰖀 34%");
+        assert_eq!(audio(Some(&snapshot(66, false, false))), "󰖀 66%");
+        assert_eq!(audio(Some(&snapshot(67, false, false))), "󰕾 67%");
+        assert_eq!(audio(Some(&snapshot(100, false, false))), "󰕾 100%");
+        assert_eq!(audio(Some(&snapshot(45, true, false))), "󰝟 45%");
+        assert_eq!(audio(Some(&snapshot(45, false, true))), "󰋋 󰖀 45%");
+        assert_eq!(audio(Some(&snapshot(45, true, true))), "󰋋 󰝟 45%");
+        assert_eq!(audio(None), "󰝟");
+    }
 }
