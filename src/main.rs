@@ -129,7 +129,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
-    let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(10);
+    let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(14);
     let left = column![workspaces]
         .align_x(Alignment::Start)
         .width(Length::Fill);
@@ -139,7 +139,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let right = column![
         row![keyboard_layout, battery]
             .align_y(Alignment::Center)
-            .spacing(8)
+            .spacing(12)
     ]
     .align_x(Alignment::End)
     .width(Length::Fill);
@@ -153,9 +153,9 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
         container(content)
             .padding(iced::Padding {
                 top: 4.0,
-                right: 6.0,
+                right: 14.0,
                 bottom: 0.0,
-                left: 6.0,
+                left: 14.0,
             })
             .width(Length::Fill)
             .height(Length::Fill)
