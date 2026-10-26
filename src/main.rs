@@ -1,16 +1,16 @@
 use std::time::Duration;
 
 use iced::widget::{column, row, text};
-use iced::{Alignment, Element, Font, Length, Subscription, Task as Command, time};
+use iced::{Alignment, Color, Element, Font, Length, Subscription, Task as Command, time};
 use iced_layershell::application;
 use iced_layershell::reexport::{Anchor, Layer};
 use iced_layershell::settings::{LayerShellSettings, Settings, StartMode};
 use iced_layershell::to_layer_message;
-
 mod battery;
 mod keyboard;
 mod services;
 pub mod theme;
+mod workspaces;
 
 const HEIGHT: u32 = 35;
 
@@ -39,6 +39,7 @@ fn subscription(_: &Bar) -> Subscription<Message> {
         time::every(Duration::from_secs(1)).map(|_| Message::Tick1s),
         Subscription::run(battery::updates).map(Message::Battery),
         Subscription::run(keyboard::updates).map(Message::Keyboard),
+        Subscription::run(workspaces::updates).map(Message::Workspaces),
     ])
 }
 
@@ -46,6 +47,7 @@ struct Bar {
     clock: String,
     battery: String,
     keyboard_layout: String,
+    workspaces: Vec<workspaces::Workspace>,
 }
 
 impl Default for Bar {
@@ -54,6 +56,7 @@ impl Default for Bar {
             clock: services::clock(),
             battery: String::new(),
             keyboard_layout: String::new(),
+            workspaces: Vec::new(),
         }
     }
 }
@@ -64,6 +67,7 @@ enum Message {
     Tick1s,
     Battery(battery::Update),
     Keyboard(keyboard::Update),
+    Workspaces(workspaces::Update),
 }
 
 fn update(bar: &mut Bar, message: Message) -> Command<Message> {
@@ -94,6 +98,16 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
+        Message::Workspaces(update) => {
+            bar.workspaces = match update {
+                Ok(snapshot) => snapshot.workspaces,
+                Err(error) => {
+                    eprintln!("{}", error);
+                    Vec::new()
+                }
+            };
+            Command::none()
+        }
         _ => unreachable!(),
     }
 }
@@ -103,7 +117,10 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
-    let left = column![].align_x(Alignment::Start).width(Length::Fill);
+    let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(10);
+    let left = column![workspaces]
+        .align_x(Alignment::Start)
+        .width(Length::Fill);
 
     let center = column![clock].align_x(Alignment::Center);
 
@@ -118,6 +135,24 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
         .height(Length::Fill)
         .align_y(Alignment::Center)
         .into()
+}
+
+fn workspace_view(workspace: &workspaces::Workspace) -> Element<'_, Message> {
+    text(services::workspace_label(workspace))
+        .color(workspace_color(workspace))
+        .into()
+}
+
+fn workspace_color(workspace: &workspaces::Workspace) -> Color {
+    let palette = theme::RosePine::MAIN;
+
+    if workspace.is_urgent {
+        palette.love
+    } else if workspace.is_focused || workspace.is_active {
+        palette.text
+    } else {
+        palette.muted
+    }
 }
 
 fn style(_counter: &Bar, theme: &iced::Theme) -> iced::theme::Style {

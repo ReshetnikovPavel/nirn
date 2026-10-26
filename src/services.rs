@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{battery, keyboard};
+use crate::{battery, keyboard, workspaces};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -15,6 +15,13 @@ pub fn clock() -> String {
 
 pub fn keyboard_layout(snapshot: &keyboard::Snapshot) -> String {
     snapshot.short_name.clone()
+}
+
+pub fn workspace_label(workspace: &workspaces::Workspace) -> String {
+    workspace
+        .name
+        .clone()
+        .unwrap_or_else(|| workspace.idx.to_string())
 }
 
 pub fn battery(snapshot: &battery::Snapshot) -> String {
