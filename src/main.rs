@@ -50,6 +50,7 @@ fn subscription(_: &Bar) -> Subscription<Message> {
 struct Bar {
     clock: String,
     audio: String,
+    microphone: String,
     battery: String,
     brightness: String,
     keyboard_layout: String,
@@ -63,6 +64,7 @@ impl Default for Bar {
         Self {
             clock: services::clock(),
             audio: services::audio(None),
+            microphone: services::microphone(None),
             battery: String::new(),
             brightness: services::brightness(None),
             keyboard_layout: String::new(),
@@ -93,13 +95,17 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             Command::none()
         }
         Message::Audio(update) => {
-            bar.audio = match update {
-                Ok(snapshot) => services::audio(Some(&snapshot)),
+            match update {
+                Ok(snapshot) => {
+                    bar.audio = services::audio(Some(&snapshot));
+                    bar.microphone = services::microphone(snapshot.microphone.as_ref());
+                }
                 Err(error) => {
                     eprintln!("{}", error);
-                    services::audio(None)
+                    bar.audio = services::audio(None);
+                    bar.microphone = services::microphone(None);
                 }
-            };
+            }
             Command::none()
         }
         Message::Battery(update) => {
@@ -168,6 +174,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let clock = text(&bar.clock).center();
     let wifi = text(&bar.wifi).center();
     let audio = text(&bar.audio).center();
+    let microphone = text(&bar.microphone).center();
     let brightness = text(&bar.brightness).center();
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
@@ -180,9 +187,16 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let center = column![clock].align_x(Alignment::Center);
 
     let right = column![
-        row![wifi, audio, brightness, keyboard_layout, battery]
-            .align_y(Alignment::Center)
-            .spacing(12)
+        row![
+            wifi,
+            audio,
+            microphone,
+            brightness,
+            keyboard_layout,
+            battery
+        ]
+        .align_y(Alignment::Center)
+        .spacing(12)
     ]
     .align_x(Alignment::End)
     .width(Length::Fill);

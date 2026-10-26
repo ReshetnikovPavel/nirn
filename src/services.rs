@@ -66,6 +66,16 @@ pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
     format!("{headphones}{volume_icon} {}%", snapshot.volume)
 }
 
+pub fn microphone(snapshot: Option<&audio::Microphone>) -> String {
+    let Some(snapshot) = snapshot else {
+        return String::new();
+    };
+
+    let icon = if snapshot.muted { "󰍭" } else { "󰍬" };
+
+    format!("{icon} {}%", snapshot.volume)
+}
+
 pub fn battery(snapshot: &battery::Snapshot) -> String {
     let battery::Snapshot { status, percentage } = *snapshot;
 
@@ -124,11 +134,21 @@ mod tests {
     }
 
     #[test]
+    fn formats_microphone_widget() {
+        let snapshot = |volume, muted| audio::Microphone { volume, muted };
+
+        assert_eq!(microphone(None), "");
+        assert_eq!(microphone(Some(&snapshot(98, false))), "󰍬 98%");
+        assert_eq!(microphone(Some(&snapshot(98, true))), "󰍭 98%");
+    }
+
+    #[test]
     fn formats_audio_widget() {
         let snapshot = |volume, muted, headphones| audio::Snapshot {
             volume,
             muted,
             headphones,
+            microphone: None,
         };
 
         assert_eq!(audio(Some(&snapshot(0, false, false))), "󰕿 0%");

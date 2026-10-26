@@ -32,6 +32,13 @@ pub struct Snapshot {
     pub volume: u8,
     pub muted: bool,
     pub headphones: bool,
+    pub microphone: Option<Microphone>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Microphone {
+    pub volume: u8,
+    pub muted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -175,7 +182,10 @@ fn wait_until_ready(mainloop: &mut Mainloop, context: &Context) -> Result<(), Er
 
 fn subscribe(mainloop: &mut Mainloop, context: &mut Context) -> Result<(), Error> {
     let (tx, rx) = std::sync::mpsc::channel();
-    let mask = InterestMaskSet::SINK | InterestMaskSet::CARD | InterestMaskSet::SERVER;
+    let mask = InterestMaskSet::SINK
+        | InterestMaskSet::SOURCE
+        | InterestMaskSet::CARD
+        | InterestMaskSet::SERVER;
     let operation = context.subscribe(mask, move |success| {
         let _ = tx.send(success);
     });
@@ -224,10 +234,14 @@ fn wait_for_done<T: ?Sized>(
 #[derive(Default)]
 struct QueryState {
     default_sink: Option<String>,
+    default_source: Option<String>,
     volume: u8,
     muted: bool,
     headphones: bool,
     sink_found: bool,
+    microphone_volume: u8,
+    microphone_muted: bool,
+    microphone_found: bool,
     failed: bool,
 }
 
@@ -237,8 +251,12 @@ fn query_state(context: &Context, mainloop: &mut Mainloop) -> Result<Snapshot, E
     {
         let state_cb = Arc::clone(&state);
         let operation = context.introspect().get_server_info(move |info| {
-            state_cb.lock().unwrap().default_sink =
-                info.default_sink_name.as_ref().map(|name| name.to_string());
+            let mut state = state_cb.lock().unwrap();
+            state.default_sink = info.default_sink_name.as_ref().map(|name| name.to_string());
+            state.default_source = info
+                .default_source_name
+                .as_ref()
+                .map(|name| name.to_string());
         });
         wait_for_done(mainloop, &operation)?;
     }
@@ -257,6 +275,27 @@ fn query_state(context: &Context, mainloop: &mut Mainloop) -> Result<Snapshot, E
                     }
                     if sink_has_headphones(sink) {
                         state.headphones = true;
+                    }
+                }
+                ListResult::End => {}
+                ListResult::Error => {
+                    state_cb.lock().unwrap().failed = true;
+                }
+            });
+        wait_for_done(mainloop, &operation)?;
+    }
+
+    {
+        let state_cb = Arc::clone(&state);
+        let operation = context
+            .introspect()
+            .get_source_info_list(move |list| match list {
+                ListResult::Item(source) => {
+                    let mut state = state_cb.lock().unwrap();
+                    if state.default_source.as_deref() == source.name.as_deref() {
+                        state.microphone_volume = volume_percent(&source.volume);
+                        state.microphone_muted = source.mute;
+                        state.microphone_found = true;
                     }
                 }
                 ListResult::End => {}
@@ -294,6 +333,10 @@ fn query_state(context: &Context, mainloop: &mut Mainloop) -> Result<Snapshot, E
         volume: if state.sink_found { state.volume } else { 0 },
         muted: if state.sink_found { state.muted } else { true },
         headphones: state.headphones,
+        microphone: state.microphone_found.then_some(Microphone {
+            volume: state.microphone_volume,
+            muted: state.microphone_muted,
+        }),
     })
 }
 
