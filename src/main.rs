@@ -18,6 +18,10 @@ mod wifi;
 
 const HEIGHT: u32 = 35;
 
+// Keep the track centered left of the clock. This is anchored to the bar
+// center, so changing the number of workspaces never moves the track.
+const TRACK_CENTER_OFFSET: f32 = marquee::WIDTH / 2.0 + 300.0;
+
 pub fn main() -> Result<(), iced_layershell::Error> {
     application(|| Bar::default(), "Nirn", update, view)
         .theme(theme::rose_pine())
@@ -215,15 +219,8 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let battery = text(&bar.battery).center();
 
     let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(14);
-
-    let mut left_items: Vec<Element<'_, Message>> = vec![workspaces.into()];
-    if !bar.track.is_empty() {
-        left_items.push(marquee::widget(&bar.track, &bar.marquee));
-    }
-
-    let left = row(left_items)
-        .spacing(16)
-        .align_y(Alignment::Center)
+    let left = column![workspaces]
+        .align_x(Alignment::Start)
         .width(Length::Fill);
 
     let center = column![clock].align_x(Alignment::Center);
@@ -248,7 +245,7 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
 
     let hovered = bar.hovered;
 
-    let bar = stack![
+    let mut layers: Vec<Element<'_, Message>> = vec![
         container(content)
             .padding(iced::Padding {
                 top: 4.0,
@@ -258,14 +255,36 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
             })
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(bar_style),
+            .style(bar_style)
+            .into(),
+    ];
+
+    if !bar.track.is_empty() {
+        layers.push(
+            container(marquee::widget(&bar.track, &bar.marquee))
+                .padding(iced::Padding {
+                    top: 4.0,
+                    right: 14.0 + 2.0 * TRACK_CENTER_OFFSET,
+                    bottom: 0.0,
+                    left: 14.0,
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .into(),
+        );
+    }
+
+    layers.push(
         container(space())
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(move |theme| hover_border_style(theme, hovered)),
-    ]
-    .width(Length::Fill)
-    .height(Length::Fill);
+            .style(move |theme| hover_border_style(theme, hovered))
+            .into(),
+    );
+
+    let bar = stack(layers).width(Length::Fill).height(Length::Fill);
 
     // The border container is taller than the bar and shifted up so its top
     // edge is clipped by the layer surface.

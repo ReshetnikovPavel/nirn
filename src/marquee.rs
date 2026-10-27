@@ -9,7 +9,7 @@ use iced::advanced::widget::{Tree, tree};
 use iced::advanced::{Layout, Widget};
 use iced::{Element, Length, Point, Rectangle, Size, alignment, mouse};
 
-pub const WIDTH: f32 = 260.0;
+pub const WIDTH: f32 = 360.0;
 pub const TICK: Duration = Duration::from_millis(33);
 
 const START_PAUSE: Duration = Duration::from_secs(2);
@@ -122,6 +122,14 @@ pub fn widget<'a, Message: 'a>(content: &'a str, state: &State) -> Element<'a, M
     })
 }
 
+fn text_x(bounds_x: f32, bounds_width: f32, text_width: f32, offset: f32) -> f32 {
+    if text_width <= bounds_width {
+        bounds_x + (bounds_width - text_width) / 2.0
+    } else {
+        bounds_x - offset
+    }
+}
+
 struct Marquee<'a> {
     content: &'a str,
     width: f32,
@@ -195,13 +203,9 @@ where
         };
 
         let y = bounds.y + (bounds.height - state.min_height()) / 2.0;
+        let x = text_x(bounds.x, bounds.width, state.min_width(), self.offset);
 
-        renderer.fill_paragraph(
-            state.raw(),
-            Point::new(bounds.x - self.offset, y),
-            style.text_color,
-            clip,
-        );
+        renderer.fill_paragraph(state.raw(), Point::new(x, y), style.text_color, clip);
     }
 }
 
@@ -225,6 +229,16 @@ mod tests {
         state.set_track("Long track");
         state.measured_width.set(width);
         state
+    }
+
+    #[test]
+    fn centers_text_that_fits() {
+        assert_eq!(text_x(100.0, WIDTH, 180.0, 0.0), 190.0);
+    }
+
+    #[test]
+    fn scrolls_text_that_does_not_fit() {
+        assert_eq!(text_x(100.0, WIDTH, WIDTH + 40.0, 20.0), 80.0);
     }
 
     #[test]
