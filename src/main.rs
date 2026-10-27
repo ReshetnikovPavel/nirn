@@ -250,12 +250,12 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
 
     let right = column![
         row![
-            wifi,
+            cpu,
+            memory,
             audio,
             microphone,
             brightness,
-            memory,
-            cpu,
+            wifi,
             keyboard_layout,
             battery
         ]
