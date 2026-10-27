@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{audio, battery, brightness, mpris, niri, wifi};
+use crate::{audio, battery, brightness, mpris, niri, system, wifi};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -74,6 +74,24 @@ pub fn microphone(snapshot: Option<&audio::Microphone>) -> String {
     let icon = if snapshot.muted { "󰍭" } else { "󰍬" };
 
     format!("{icon} {}%", snapshot.volume)
+}
+
+pub fn memory(snapshot: Option<&system::Snapshot>) -> String {
+    let Some(snapshot) = snapshot else {
+        return String::new();
+    };
+
+    let gigabytes = snapshot.memory_used_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+
+    format!("󰍛 {gigabytes:.1}GB")
+}
+
+pub fn cpu(snapshot: Option<&system::Snapshot>) -> String {
+    let Some(snapshot) = snapshot else {
+        return String::new();
+    };
+
+    format!("󰻠 {:.0}%", snapshot.cpu_percentage)
 }
 
 pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
@@ -156,6 +174,19 @@ mod tests {
         assert_eq!(microphone(None), "");
         assert_eq!(microphone(Some(&snapshot(98, false))), "󰍬 98%");
         assert_eq!(microphone(Some(&snapshot(98, true))), "󰍭 98%");
+    }
+
+    #[test]
+    fn formats_system_widgets() {
+        let snapshot = system::Snapshot {
+            memory_used_bytes: 5_905_580_032,
+            cpu_percentage: 12.4,
+        };
+
+        assert_eq!(memory(None), "");
+        assert_eq!(cpu(None), "");
+        assert_eq!(memory(Some(&snapshot)), "󰍛 5.5GB");
+        assert_eq!(cpu(Some(&snapshot)), "󰻠 12%");
     }
 
     #[test]

@@ -13,6 +13,7 @@ mod marquee;
 mod mpris;
 mod niri;
 mod services;
+mod system;
 pub mod theme;
 mod wifi;
 
@@ -50,6 +51,7 @@ fn subscription(bar: &Bar) -> Subscription<Message> {
         Subscription::run(brightness::updates).map(Message::Brightness),
         Subscription::run(mpris::updates).map(Message::Mpris),
         Subscription::run(niri::updates).map(Message::Niri),
+        Subscription::run(system::updates).map(Message::System),
         Subscription::run(wifi::updates).map(Message::Wifi),
     ];
 
@@ -66,6 +68,8 @@ struct Bar {
     microphone: String,
     battery: String,
     brightness: String,
+    memory: String,
+    cpu: String,
     keyboard_layout: String,
     wifi: String,
     track: String,
@@ -82,6 +86,8 @@ impl Default for Bar {
             microphone: services::microphone(None),
             battery: String::new(),
             brightness: services::brightness(None),
+            memory: services::memory(None),
+            cpu: services::cpu(None),
             keyboard_layout: String::new(),
             wifi: String::new(),
             track: String::new(),
@@ -101,6 +107,7 @@ enum Message {
     Brightness(brightness::Update),
     Mpris(mpris::Update),
     Niri(niri::Update),
+    System(system::Update),
     Wifi(wifi::Update),
     MarqueeTick,
     MouseEnter,
@@ -183,6 +190,20 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             }
             Command::none()
         }
+        Message::System(update) => {
+            match update {
+                Ok(snapshot) => {
+                    bar.memory = services::memory(Some(&snapshot));
+                    bar.cpu = services::cpu(Some(&snapshot));
+                }
+                Err(error) => {
+                    eprintln!("{}", error);
+                    bar.memory = String::new();
+                    bar.cpu = String::new();
+                }
+            }
+            Command::none()
+        }
         Message::Wifi(update) => {
             bar.wifi = match update {
                 Ok(snapshot) => services::wifi(snapshot.as_ref()),
@@ -215,6 +236,8 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let audio = text(&bar.audio).center();
     let microphone = text(&bar.microphone).center();
     let brightness = text(&bar.brightness).center();
+    let memory = text(&bar.memory).center();
+    let cpu = text(&bar.cpu).center();
     let keyboard_layout = text(&bar.keyboard_layout).center();
     let battery = text(&bar.battery).center();
 
@@ -231,6 +254,8 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
             audio,
             microphone,
             brightness,
+            memory,
+            cpu,
             keyboard_layout,
             battery
         ]
