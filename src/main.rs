@@ -9,6 +9,8 @@ use iced_layershell::to_layer_message;
 mod audio;
 mod battery;
 mod brightness;
+mod marquee;
+mod mpris;
 mod niri;
 mod services;
 pub mod theme;
@@ -36,15 +38,22 @@ pub fn main() -> Result<(), iced_layershell::Error> {
         .run()
 }
 
-fn subscription(_: &Bar) -> Subscription<Message> {
-    Subscription::batch([
+fn subscription(bar: &Bar) -> Subscription<Message> {
+    let mut subscriptions = vec![
         time::every(Duration::from_secs(1)).map(|_| Message::Tick1s),
         Subscription::run(audio::updates).map(Message::Audio),
         Subscription::run(battery::updates).map(Message::Battery),
         Subscription::run(brightness::updates).map(Message::Brightness),
+        Subscription::run(mpris::updates).map(Message::Mpris),
         Subscription::run(niri::updates).map(Message::Niri),
         Subscription::run(wifi::updates).map(Message::Wifi),
-    ])
+    ];
+
+    if bar.marquee.needs_animation() {
+        subscriptions.push(time::every(marquee::TICK).map(|_| Message::MarqueeTick));
+    }
+
+    Subscription::batch(subscriptions)
 }
 
 struct Bar {
@@ -55,6 +64,8 @@ struct Bar {
     brightness: String,
     keyboard_layout: String,
     wifi: String,
+    track: String,
+    marquee: marquee::State,
     workspaces: Vec<niri::Workspace>,
     hovered: bool,
 }
@@ -69,6 +80,8 @@ impl Default for Bar {
             brightness: services::brightness(None),
             keyboard_layout: String::new(),
             wifi: String::new(),
+            track: String::new(),
+            marquee: marquee::State::default(),
             workspaces: Vec::new(),
             hovered: false,
         }
@@ -82,8 +95,10 @@ enum Message {
     Audio(audio::Update),
     Battery(battery::Update),
     Brightness(brightness::Update),
+    Mpris(mpris::Update),
     Niri(niri::Update),
     Wifi(wifi::Update),
+    MarqueeTick,
     MouseEnter,
     MouseExit,
 }
@@ -130,6 +145,22 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
+        Message::Mpris(update) => {
+            let track = match update {
+                Ok(snapshot) => services::mpris(snapshot.as_ref()),
+                Err(error) => {
+                    eprintln!("{}", error);
+                    String::new()
+                }
+            };
+
+            if bar.track != track {
+                bar.track = track;
+                bar.marquee.set_track(&bar.track);
+            }
+
+            Command::none()
+        }
         Message::Niri(update) => {
             match update {
                 Ok(snapshot) => {
@@ -158,6 +189,10 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             };
             Command::none()
         }
+        Message::MarqueeTick => {
+            bar.marquee.tick();
+            Command::none()
+        }
         Message::MouseEnter => {
             bar.hovered = true;
             Command::none()
@@ -180,8 +215,15 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let battery = text(&bar.battery).center();
 
     let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(14);
-    let left = column![workspaces]
-        .align_x(Alignment::Start)
+
+    let mut left_items: Vec<Element<'_, Message>> = vec![workspaces.into()];
+    if !bar.track.is_empty() {
+        left_items.push(marquee::widget(&bar.track, &bar.marquee));
+    }
+
+    let left = row(left_items)
+        .spacing(16)
+        .align_y(Alignment::Center)
         .width(Length::Fill);
 
     let center = column![clock].align_x(Alignment::Center);

@@ -1,6 +1,6 @@
 use chrono::{Datelike as _, Timelike as _};
 
-use crate::{audio, battery, brightness, niri, wifi};
+use crate::{audio, battery, brightness, mpris, niri, wifi};
 
 pub fn clock() -> String {
     let now = chrono::Local::now();
@@ -76,6 +76,12 @@ pub fn microphone(snapshot: Option<&audio::Microphone>) -> String {
     format!("{icon} {}%", snapshot.volume)
 }
 
+pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
+    snapshot
+        .map(|snapshot| snapshot.track.clone())
+        .unwrap_or_default()
+}
+
 pub fn battery(snapshot: &battery::Snapshot) -> String {
     let battery::Snapshot { status, percentage } = *snapshot;
 
@@ -131,6 +137,16 @@ mod tests {
         assert_eq!(brightness(Some(&snapshot(75))), "󰃟 75%");
         assert_eq!(brightness(Some(&snapshot(76))), "󰃠 76%");
         assert_eq!(brightness(Some(&snapshot(100))), "󰃠 100%");
+    }
+
+    #[test]
+    fn formats_mpris_widget() {
+        let snapshot = mpris::Snapshot {
+            track: "Artist – Track".to_owned(),
+        };
+
+        assert_eq!(mpris(None), "");
+        assert_eq!(mpris(Some(&snapshot)), "Artist – Track");
     }
 
     #[test]
