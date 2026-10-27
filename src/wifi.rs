@@ -20,12 +20,14 @@ const RETRY_DELAY: Duration = Duration::from_secs(5);
 
 const MANAGER_INTERFACE: &str = "org.freedesktop.NetworkManager";
 const WIRELESS_INTERFACE: &str = "org.freedesktop.NetworkManager.Device.Wireless";
+const ACCESS_POINT_INTERFACE: &str = "org.freedesktop.NetworkManager.AccessPoint";
 
 pub type Update = Result<Option<Snapshot>, Error>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
     pub ssid: String,
+    pub strength: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +95,9 @@ trait Wireless {
 trait AccessPoint {
     #[zbus(property)]
     fn ssid(&self) -> zbus::Result<Vec<u8>>;
+
+    #[zbus(property)]
+    fn strength(&self) -> zbus::Result<u8>;
 }
 
 pub fn updates() -> impl Stream<Item = Update> {
@@ -131,7 +136,7 @@ async fn watch(output: &mut Sender<Update>) -> Result<(), Error> {
         .await?;
     let mut manager_changed = manager_properties.receive_properties_changed().await?;
 
-    loop {
+    'device: loop {
         let wifi_path = find_wifi_device(&connection, manager.devices().await?).await?;
 
         let Some(wifi_path) = wifi_path else {
@@ -153,29 +158,86 @@ async fn watch(output: &mut Sender<Update>) -> Result<(), Error> {
             .await?;
         let mut wireless_changed = wireless_properties.receive_properties_changed().await?;
 
-        forward_wifi(output, &connection, &wireless).await?;
-
         loop {
-            select! {
-                manager_change = manager_changed.next() => {
-                    let Some(message) = manager_change else {
-                        return Err(Error::new(
-                            "NetworkManager stopped sending device updates",
-                        ));
-                    };
+            let active_access_point = wireless.active_access_point().await?;
 
-                    if changes_property(&message, MANAGER_INTERFACE, "Devices") {
-                        break;
+            if active_access_point.as_str() == "/" {
+                forward(output, None).await?;
+
+                loop {
+                    select! {
+                        manager_change = manager_changed.next() => {
+                            let Some(message) = manager_change else {
+                                return Err(Error::new(
+                                    "NetworkManager stopped sending device updates",
+                                ));
+                            };
+
+                            if changes_property(&message, MANAGER_INTERFACE, "Devices") {
+                                continue 'device;
+                            }
+                        }
+                        wireless_change = wireless_changed.next() => {
+                            let Some(message) = wireless_change else {
+                                continue 'device;
+                            };
+
+                            if changes_property(&message, WIRELESS_INTERFACE, "ActiveAccessPoint") {
+                                break;
+                            }
+                        }
                     }
                 }
-                wireless_change = wireless_changed.next() => {
-                    let Some(message) = wireless_change else {
-                        // The device disappeared; look for it again.
-                        break;
-                    };
 
-                    if changes_property(&message, WIRELESS_INTERFACE, "ActiveAccessPoint") {
-                        forward_wifi(output, &connection, &wireless).await?;
+                continue;
+            }
+
+            let access_point = AccessPointProxy::builder(&connection)
+                .path(active_access_point.clone())?
+                .cache_properties(CacheProperties::No)
+                .build()
+                .await?;
+            let access_point_properties = PropertiesProxy::builder(&connection)
+                .destination(SERVICE)?
+                .path(active_access_point)?
+                .cache_properties(CacheProperties::No)
+                .build()
+                .await?;
+            let mut access_point_changed =
+                access_point_properties.receive_properties_changed().await?;
+
+            forward_access_point(output, &access_point).await?;
+
+            loop {
+                select! {
+                    manager_change = manager_changed.next() => {
+                        let Some(message) = manager_change else {
+                            return Err(Error::new(
+                                "NetworkManager stopped sending device updates",
+                            ));
+                        };
+
+                        if changes_property(&message, MANAGER_INTERFACE, "Devices") {
+                            continue 'device;
+                        }
+                    }
+                    wireless_change = wireless_changed.next() => {
+                        let Some(message) = wireless_change else {
+                            continue 'device;
+                        };
+
+                        if changes_property(&message, WIRELESS_INTERFACE, "ActiveAccessPoint") {
+                            break;
+                        }
+                    }
+                    access_point_change = access_point_changed.next() => {
+                        let Some(message) = access_point_change else {
+                            break;
+                        };
+
+                        if changes_property(&message, ACCESS_POINT_INTERFACE, "Strength") {
+                            forward_access_point(output, &access_point).await?;
+                        }
                     }
                 }
             }
@@ -206,31 +268,19 @@ async fn find_wifi_device(
     Ok(None)
 }
 
-async fn forward_wifi(
+async fn forward_access_point(
     output: &mut Sender<Update>,
-    connection: &Connection,
-    wireless: &WirelessProxy<'_>,
+    access_point: &AccessPointProxy<'_>,
 ) -> Result<(), Error> {
-    let active_access_point = wireless.active_access_point().await?;
+    let ssid = ssid(&access_point.ssid().await?);
+    let strength = access_point.strength().await?;
 
-    let ssid = if active_access_point.as_str() == "/" {
-        None
-    } else {
-        let access_point = AccessPointProxy::builder(connection)
-            .path(active_access_point)?
-            .cache_properties(CacheProperties::No)
-            .build()
-            .await?;
-
-        ssid(&access_point.ssid().await?)
-    };
-
-    forward(output, ssid).await
+    forward(output, ssid.map(|ssid| Snapshot { ssid, strength })).await
 }
 
-async fn forward(output: &mut Sender<Update>, ssid: Option<String>) -> Result<(), Error> {
+async fn forward(output: &mut Sender<Update>, snapshot: Option<Snapshot>) -> Result<(), Error> {
     output
-        .send(Ok(ssid.map(|ssid| Snapshot { ssid })))
+        .send(Ok(snapshot))
         .await
         .map_err(|_| Error::new("update channel closed"))
 }

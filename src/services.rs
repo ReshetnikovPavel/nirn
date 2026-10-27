@@ -25,10 +25,19 @@ pub fn workspace_label(workspace: &niri::Workspace) -> String {
 }
 
 pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
-    match snapshot {
-        Some(snapshot) => format!("󰖩 {}", snapshot.ssid),
-        None => "󰖪".to_owned(),
-    }
+    let Some(snapshot) = snapshot else {
+        return "󰤮".to_owned();
+    };
+
+    let icon = match snapshot.strength {
+        0..=20 => "󰤯",
+        21..=40 => "󰤟",
+        41..=60 => "󰤢",
+        61..=80 => "󰤥",
+        _ => "󰤨",
+    };
+
+    format!("{icon} {}", snapshot.ssid)
 }
 
 pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> String {
@@ -103,7 +112,7 @@ pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
 pub fn battery(snapshot: &battery::Snapshot) -> String {
     let battery::Snapshot { status, percentage } = *snapshot;
 
-    let charging = if matches!(status, battery::Status::Charging) {
+    let charging = if matches!(status, battery::Status::Charging | battery::Status::Full) {
         "󱐋"
     } else {
         ""
@@ -135,14 +144,32 @@ mod tests {
         let snapshot = |percentage| brightness::Snapshot { percentage };
 
         assert_eq!(brightness(None), "");
-        assert_eq!(brightness(Some(&snapshot(0))), "󰃝 0%");
-        assert_eq!(brightness(Some(&snapshot(25))), "󰃝 25%");
-        assert_eq!(brightness(Some(&snapshot(26))), "󰃞 26%");
-        assert_eq!(brightness(Some(&snapshot(50))), "󰃞 50%");
-        assert_eq!(brightness(Some(&snapshot(51))), "󰃟 51%");
-        assert_eq!(brightness(Some(&snapshot(75))), "󰃟 75%");
-        assert_eq!(brightness(Some(&snapshot(76))), "󰃠 76%");
+        assert_eq!(brightness(Some(&snapshot(0))), "󰃞 0%");
+        assert_eq!(brightness(Some(&snapshot(33))), "󰃞 33%");
+        assert_eq!(brightness(Some(&snapshot(34))), "󰃟 34%");
+        assert_eq!(brightness(Some(&snapshot(66))), "󰃟 66%");
+        assert_eq!(brightness(Some(&snapshot(67))), "󰃠 67%");
         assert_eq!(brightness(Some(&snapshot(100))), "󰃠 100%");
+    }
+
+    #[test]
+    fn formats_wifi_widget() {
+        let snapshot = |strength| wifi::Snapshot {
+            ssid: "pavelresh".to_owned(),
+            strength,
+        };
+
+        assert_eq!(wifi(None), "󰤮");
+        assert_eq!(wifi(Some(&snapshot(0))), "󰤯 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(20))), "󰤯 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(21))), "󰤟 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(40))), "󰤟 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(41))), "󰤢 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(60))), "󰤢 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(61))), "󰤥 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(80))), "󰤥 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(81))), "󰤨 pavelresh");
+        assert_eq!(wifi(Some(&snapshot(100))), "󰤨 pavelresh");
     }
 
     #[test]
@@ -160,8 +187,8 @@ mod tests {
         let snapshot = |volume, muted| audio::Microphone { volume, muted };
 
         assert_eq!(microphone(None), "");
-        assert_eq!(microphone(Some(&snapshot(98, false))), "󰍬 98%");
-        assert_eq!(microphone(Some(&snapshot(98, true))), "󰍭 98%");
+        assert_eq!(microphone(Some(&snapshot(98, false))), " 98%");
+        assert_eq!(microphone(Some(&snapshot(98, true))), " 98%");
     }
 
     #[test]
@@ -173,8 +200,28 @@ mod tests {
 
         assert_eq!(memory(None), "");
         assert_eq!(cpu(None), "");
-        assert_eq!(memory(Some(&snapshot)), "󰍛 5.5GB");
-        assert_eq!(cpu(Some(&snapshot)), "󰻠 12%");
+        assert_eq!(memory(Some(&snapshot)), " 5.5GB");
+        assert_eq!(cpu(Some(&snapshot)), " 12%");
+    }
+
+    #[test]
+    fn formats_battery_widget() {
+        let snapshot = |status, percentage| battery::Snapshot { status, percentage };
+
+        assert_eq!(
+            battery(&snapshot(battery::Status::Discharging, 100)),
+            "󰁹 100%"
+        );
+        assert_eq!(
+            battery(&snapshot(battery::Status::Charging, 100)),
+            "󱐋󰁹 100%"
+        );
+        assert_eq!(battery(&snapshot(battery::Status::Full, 100)), "󱐋󰁹 100%");
+        assert_eq!(
+            battery(&snapshot(battery::Status::NotCharging, 42)),
+            "󰁽 42%"
+        );
+        assert_eq!(battery(&snapshot(battery::Status::Charging, 9)), "󱐋󰂎 09%");
     }
 
     #[test]
@@ -186,14 +233,16 @@ mod tests {
             microphone: None,
         };
 
-        assert_eq!(audio(Some(&snapshot(0, false, false))), "󰕿 0%");
-        assert_eq!(audio(Some(&snapshot(33, false, false))), "󰕿 33%");
-        assert_eq!(audio(Some(&snapshot(34, false, false))), "󰖀 34%");
-        assert_eq!(audio(Some(&snapshot(66, false, false))), "󰖀 66%");
-        assert_eq!(audio(Some(&snapshot(67, false, false))), "󰕾 67%");
-        assert_eq!(audio(Some(&snapshot(100, false, false))), "󰕾 100%");
+        assert_eq!(audio(Some(&snapshot(0, false, false))), " 0%");
+        assert_eq!(audio(Some(&snapshot(25, false, false))), " 25%");
+        assert_eq!(audio(Some(&snapshot(26, false, false))), " 26%");
+        assert_eq!(audio(Some(&snapshot(50, false, false))), " 50%");
+        assert_eq!(audio(Some(&snapshot(51, false, false))), " 51%");
+        assert_eq!(audio(Some(&snapshot(75, false, false))), " 75%");
+        assert_eq!(audio(Some(&snapshot(76, false, false))), " 76%");
+        assert_eq!(audio(Some(&snapshot(100, false, false))), " 100%");
         assert_eq!(audio(Some(&snapshot(45, true, false))), "󰝟 45%");
-        assert_eq!(audio(Some(&snapshot(45, false, true))), "󰋋 󰖀 45%");
+        assert_eq!(audio(Some(&snapshot(45, false, true))), "󰋋  45%");
         assert_eq!(audio(Some(&snapshot(45, true, true))), "󰋋 󰝟 45%");
         assert_eq!(audio(None), "󰝟");
     }
