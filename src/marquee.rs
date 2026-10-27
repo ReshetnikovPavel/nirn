@@ -13,14 +13,13 @@ pub const WIDTH: f32 = 260.0;
 pub const TICK: Duration = Duration::from_millis(33);
 
 const START_PAUSE: Duration = Duration::from_secs(2);
-const END_PAUSE: Duration = Duration::from_secs(2);
 const SPEED: f32 = 30.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     StartPause,
     Scrolling,
-    EndPause,
+    Entering,
 }
 
 #[derive(Debug)]
@@ -78,27 +77,33 @@ impl State {
             return;
         }
 
-        let max_offset = width - WIDTH;
-        let elapsed = TICK.as_secs_f32();
-        self.elapsed += TICK;
+        let step = SPEED * TICK.as_secs_f32();
 
         match self.phase {
             Phase::StartPause => {
+                self.elapsed += TICK;
+
                 if self.elapsed >= START_PAUSE {
                     self.phase = Phase::Scrolling;
                     self.elapsed = Duration::ZERO;
                 }
             }
             Phase::Scrolling => {
-                self.offset = (self.offset + SPEED * elapsed).min(max_offset);
+                self.offset += step;
 
-                if self.offset >= max_offset {
-                    self.phase = Phase::EndPause;
-                    self.elapsed = Duration::ZERO;
+                // Once the text has completely left the viewport, move it
+                // just outside the right edge so it can scroll back in.
+                if self.offset >= width {
+                    self.offset = -WIDTH;
+                    self.phase = Phase::Entering;
                 }
             }
-            Phase::EndPause => {
-                if self.elapsed >= END_PAUSE {
+            Phase::Entering => {
+                self.offset += step;
+
+                // Stop when the beginning of the track is back at the
+                // start position, wait, then continue scrolling left.
+                if self.offset >= 0.0 {
                     self.offset = 0.0;
                     self.phase = Phase::StartPause;
                     self.elapsed = Duration::ZERO;
@@ -257,26 +262,47 @@ mod tests {
     }
 
     #[test]
-    fn pauses_at_the_end_then_restarts() {
+    fn wraps_from_the_right_edge() {
         let width = WIDTH + 10.0;
         let mut state = long_track(width);
+        state.phase = Phase::Scrolling;
+        state.offset = width - 0.1;
 
-        for _ in 0..1_000 {
-            if state.phase == Phase::EndPause {
-                break;
-            }
+        state.tick();
 
-            state.tick();
-        }
+        assert_eq!(state.phase, Phase::Entering);
+        assert_eq!(state.offset, -WIDTH);
 
-        assert_eq!(state.phase, Phase::EndPause);
-        assert_eq!(state.offset, width - WIDTH);
+        state.tick();
 
-        for _ in 0..62 {
-            state.tick();
-        }
+        assert!(state.offset > -WIDTH);
+        assert!(state.offset < 0.0);
+    }
+
+    #[test]
+    fn pauses_when_entering_reaches_start() {
+        let mut state = long_track(WIDTH + 10.0);
+        state.phase = Phase::Entering;
+        state.offset = -0.1;
+
+        state.tick();
 
         assert_eq!(state.phase, Phase::StartPause);
         assert_eq!(state.offset, 0.0);
+
+        state.tick();
+
+        assert_eq!(state.offset, 0.0);
+
+        for _ in 0..60 {
+            state.tick();
+        }
+
+        assert_eq!(state.phase, Phase::Scrolling);
+        assert_eq!(state.offset, 0.0);
+
+        state.tick();
+
+        assert!(state.offset > 0.0);
     }
 }
