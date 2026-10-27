@@ -18,6 +18,8 @@ pub mod theme;
 mod wifi;
 
 const HEIGHT: u32 = 35;
+const RIGHT_ICON_SIZE: f32 = 22.0;
+const BATTERY_ICON_SIZE: f32 = 16.0;
 
 // Keep the track centered left of the clock. This is anchored to the bar
 // center, so changing the number of workspaces never moves the track.
@@ -64,14 +66,14 @@ fn subscription(bar: &Bar) -> Subscription<Message> {
 
 struct Bar {
     clock: String,
-    audio: String,
-    microphone: String,
-    battery: String,
-    brightness: String,
-    memory: String,
-    cpu: String,
-    keyboard_layout: String,
-    wifi: String,
+    audio: services::Status,
+    microphone: services::Status,
+    battery: services::Status,
+    brightness: services::Status,
+    memory: services::Status,
+    cpu: services::Status,
+    keyboard_layout: services::Status,
+    wifi: services::Status,
     track: String,
     marquee: marquee::State,
     workspaces: Vec<niri::Workspace>,
@@ -84,12 +86,12 @@ impl Default for Bar {
             clock: services::clock(),
             audio: services::audio(None),
             microphone: services::microphone(None),
-            battery: String::new(),
+            battery: services::Status::default(),
             brightness: services::brightness(None),
             memory: services::memory(None),
             cpu: services::cpu(None),
-            keyboard_layout: String::new(),
-            wifi: String::new(),
+            keyboard_layout: services::Status::default(),
+            wifi: services::Status::default(),
             track: String::new(),
             marquee: marquee::State::default(),
             workspaces: Vec::new(),
@@ -138,10 +140,10 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
             bar.battery = match update {
                 Ok(Some(snapshot)) => services::battery(&snapshot),
                 // No battery, e.g. on a desktop machine.
-                Ok(None) => String::new(),
+                Ok(None) => services::Status::default(),
                 Err(error) => {
                     eprintln!("{}", error);
-                    "Err".to_owned()
+                    services::Status::text("Err")
                 }
             };
             Command::none()
@@ -151,7 +153,7 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
                 Ok(snapshot) => services::brightness(snapshot.as_ref()),
                 Err(error) => {
                     eprintln!("{}", error);
-                    "Err".to_owned()
+                    services::Status::text("Err")
                 }
             };
             Command::none()
@@ -184,7 +186,7 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
                 }
                 Err(error) => {
                     eprintln!("{}", error);
-                    bar.keyboard_layout = "Err".to_owned();
+                    bar.keyboard_layout = services::Status::text("Err");
                     bar.workspaces.clear();
                 }
             }
@@ -198,8 +200,8 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
                 }
                 Err(error) => {
                     eprintln!("{}", error);
-                    bar.memory = String::new();
-                    bar.cpu = String::new();
+                    bar.memory = services::Status::default();
+                    bar.cpu = services::Status::default();
                 }
             }
             Command::none()
@@ -232,14 +234,14 @@ fn update(bar: &mut Bar, message: Message) -> Command<Message> {
 
 fn view(bar: &'_ Bar) -> Element<'_, Message> {
     let clock = text(&bar.clock).center();
-    let wifi = text(&bar.wifi).center();
-    let audio = text(&bar.audio).center();
-    let microphone = text(&bar.microphone).center();
-    let brightness = text(&bar.brightness).center();
-    let memory = text(&bar.memory).center();
-    let cpu = text(&bar.cpu).center();
-    let keyboard_layout = text(&bar.keyboard_layout).center();
-    let battery = text(&bar.battery).center();
+    let wifi = status_view(&bar.wifi, RIGHT_ICON_SIZE);
+    let audio = status_view(&bar.audio, RIGHT_ICON_SIZE);
+    let microphone = status_view(&bar.microphone, RIGHT_ICON_SIZE);
+    let brightness = status_view(&bar.brightness, RIGHT_ICON_SIZE);
+    let memory = status_view(&bar.memory, RIGHT_ICON_SIZE);
+    let cpu = status_view(&bar.cpu, RIGHT_ICON_SIZE);
+    let keyboard_layout = status_view(&bar.keyboard_layout, RIGHT_ICON_SIZE);
+    let battery = status_view(&bar.battery, BATTERY_ICON_SIZE);
 
     let workspaces = row(bar.workspaces.iter().map(workspace_view)).spacing(14);
     let left = column![workspaces]
@@ -327,6 +329,29 @@ fn view(bar: &'_ Bar) -> Element<'_, Message> {
         .on_enter(Message::MouseEnter)
         .on_exit(Message::MouseExit)
         .into()
+}
+
+fn status_view(status: &services::Status, icon_size: f32) -> Element<'_, Message> {
+    let icon: Option<Element<'_, Message>> = if status.icon.is_empty() {
+        None
+    } else {
+        Some(text(&status.icon).size(icon_size).center().into())
+    };
+    let label: Option<Element<'_, Message>> = if status.text.is_empty() {
+        None
+    } else {
+        Some(text(&status.text).center().into())
+    };
+
+    match (icon, label) {
+        (Some(icon), Some(label)) => row![icon, label]
+            .spacing(4)
+            .align_y(Alignment::Center)
+            .into(),
+        (Some(icon), None) => icon,
+        (None, Some(label)) => label,
+        (None, None) => space().width(Length::Shrink).into(),
+    }
 }
 
 fn bar_style(theme: &iced::Theme) -> iced::widget::container::Style {

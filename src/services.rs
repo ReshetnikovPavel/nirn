@@ -2,6 +2,25 @@ use chrono::{Datelike as _, Timelike as _};
 
 use crate::{audio, battery, brightness, mpris, niri, system, wifi};
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Status {
+    pub icon: String,
+    pub text: String,
+}
+
+impl Status {
+    pub fn new(icon: impl Into<String>, text: impl Into<String>) -> Self {
+        Self {
+            icon: icon.into(),
+            text: text.into(),
+        }
+    }
+
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::new("", text)
+    }
+}
+
 pub fn clock() -> String {
     let now = chrono::Local::now();
     let hour = now.hour();
@@ -13,8 +32,8 @@ pub fn clock() -> String {
     format!("{hour:02}:{minute:02} | {month} {day:02}")
 }
 
-pub fn keyboard_layout(snapshot: &niri::Keyboard) -> String {
-    format!("󰌌 {}", snapshot.short_name)
+pub fn keyboard_layout(snapshot: &niri::Keyboard) -> Status {
+    Status::new("󰌌", snapshot.short_name.clone())
 }
 
 pub fn workspace_label(workspace: &niri::Workspace) -> String {
@@ -24,9 +43,9 @@ pub fn workspace_label(workspace: &niri::Workspace) -> String {
         .unwrap_or_else(|| workspace.idx.to_string())
 }
 
-pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
+pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> Status {
     let Some(snapshot) = snapshot else {
-        return "󰤮".to_owned();
+        return Status::new("󰤮", "");
     };
 
     let icon = match snapshot.strength {
@@ -37,12 +56,12 @@ pub fn wifi(snapshot: Option<&wifi::Snapshot>) -> String {
         _ => "󰤨",
     };
 
-    format!("{icon} {}", snapshot.ssid)
+    Status::new(icon, snapshot.ssid.clone())
 }
 
-pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> String {
+pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> Status {
     let Some(snapshot) = snapshot else {
-        return String::new();
+        return Status::default();
     };
 
     let icon = match snapshot.percentage {
@@ -51,12 +70,12 @@ pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> String {
         _ => "󰃠",
     };
 
-    format!("{icon} {}%", snapshot.percentage)
+    Status::new(icon, format!("{}%", snapshot.percentage))
 }
 
-pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
+pub fn audio(snapshot: Option<&audio::Snapshot>) -> Status {
     let Some(snapshot) = snapshot else {
-        return "󰝟".to_owned();
+        return Status::new("󰝟", "");
     };
 
     let volume_icon = if snapshot.muted {
@@ -71,36 +90,37 @@ pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
     };
 
     let headphones = if snapshot.headphones { "󰋋 " } else { "" };
+    let icon = format!("{headphones}{volume_icon}");
 
-    format!("{headphones}{volume_icon} {}%", snapshot.volume)
+    Status::new(icon, format!("{}%", snapshot.volume))
 }
 
-pub fn microphone(snapshot: Option<&audio::Microphone>) -> String {
+pub fn microphone(snapshot: Option<&audio::Microphone>) -> Status {
     let Some(snapshot) = snapshot else {
-        return String::new();
+        return Status::default();
     };
 
     let icon = if snapshot.muted { "" } else { "" };
 
-    format!("{icon} {}%", snapshot.volume)
+    Status::new(icon, format!("{}%", snapshot.volume))
 }
 
-pub fn memory(snapshot: Option<&system::Snapshot>) -> String {
+pub fn memory(snapshot: Option<&system::Snapshot>) -> Status {
     let Some(snapshot) = snapshot else {
-        return String::new();
+        return Status::default();
     };
 
     let gigabytes = snapshot.memory_used_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
 
-    format!(" {gigabytes:.1}GB")
+    Status::new("", format!("{gigabytes:.1}GB"))
 }
 
-pub fn cpu(snapshot: Option<&system::Snapshot>) -> String {
+pub fn cpu(snapshot: Option<&system::Snapshot>) -> Status {
     let Some(snapshot) = snapshot else {
-        return String::new();
+        return Status::default();
     };
 
-    format!(" {:.0}%", snapshot.cpu_percentage)
+    Status::new("", format!("{:.0}%", snapshot.cpu_percentage))
 }
 
 pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
@@ -109,7 +129,7 @@ pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
         .unwrap_or_default()
 }
 
-pub fn battery(snapshot: &battery::Snapshot) -> String {
+pub fn battery(snapshot: &battery::Snapshot) -> Status {
     let battery::Snapshot { status, percentage } = *snapshot;
 
     let charging = if matches!(status, battery::Status::Charging | battery::Status::Full) {
@@ -132,7 +152,7 @@ pub fn battery(snapshot: &battery::Snapshot) -> String {
         _ => unreachable!(),
     };
 
-    format!("{charging}{icon} {percentage:02}%")
+    Status::new(format!("{charging}{icon}"), format!("{percentage:02}%"))
 }
 
 #[cfg(test)]
@@ -143,13 +163,13 @@ mod tests {
     fn formats_brightness_widget() {
         let snapshot = |percentage| brightness::Snapshot { percentage };
 
-        assert_eq!(brightness(None), "");
-        assert_eq!(brightness(Some(&snapshot(0))), "󰃞 0%");
-        assert_eq!(brightness(Some(&snapshot(33))), "󰃞 33%");
-        assert_eq!(brightness(Some(&snapshot(34))), "󰃟 34%");
-        assert_eq!(brightness(Some(&snapshot(66))), "󰃟 66%");
-        assert_eq!(brightness(Some(&snapshot(67))), "󰃠 67%");
-        assert_eq!(brightness(Some(&snapshot(100))), "󰃠 100%");
+        assert_eq!(brightness(None), Status::default());
+        assert_eq!(brightness(Some(&snapshot(0))), Status::new("󰃞", "0%"));
+        assert_eq!(brightness(Some(&snapshot(33))), Status::new("󰃞", "33%"));
+        assert_eq!(brightness(Some(&snapshot(34))), Status::new("󰃟", "34%"));
+        assert_eq!(brightness(Some(&snapshot(66))), Status::new("󰃟", "66%"));
+        assert_eq!(brightness(Some(&snapshot(67))), Status::new("󰃠", "67%"));
+        assert_eq!(brightness(Some(&snapshot(100))), Status::new("󰃠", "100%"));
     }
 
     #[test]
@@ -159,17 +179,27 @@ mod tests {
             strength,
         };
 
-        assert_eq!(wifi(None), "󰤮");
-        assert_eq!(wifi(Some(&snapshot(0))), "󰤯 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(20))), "󰤯 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(21))), "󰤟 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(40))), "󰤟 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(41))), "󰤢 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(60))), "󰤢 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(61))), "󰤥 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(80))), "󰤥 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(81))), "󰤨 pavelresh");
-        assert_eq!(wifi(Some(&snapshot(100))), "󰤨 pavelresh");
+        assert_eq!(wifi(None), Status::new("󰤮", ""));
+        assert_eq!(wifi(Some(&snapshot(0))), Status::new("󰤯", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(20))), Status::new("󰤯", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(21))), Status::new("󰤟", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(40))), Status::new("󰤟", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(41))), Status::new("󰤢", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(60))), Status::new("󰤢", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(61))), Status::new("󰤥", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(80))), Status::new("󰤥", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(81))), Status::new("󰤨", "pavelresh"));
+        assert_eq!(wifi(Some(&snapshot(100))), Status::new("󰤨", "pavelresh"));
+    }
+
+    #[test]
+    fn formats_keyboard_layout_widget() {
+        let snapshot = niri::Keyboard {
+            name: "English (US)".to_owned(),
+            short_name: "us".to_owned(),
+        };
+
+        assert_eq!(keyboard_layout(&snapshot), Status::new("󰌌", "us"));
     }
 
     #[test]
@@ -186,9 +216,15 @@ mod tests {
     fn formats_microphone_widget() {
         let snapshot = |volume, muted| audio::Microphone { volume, muted };
 
-        assert_eq!(microphone(None), "");
-        assert_eq!(microphone(Some(&snapshot(98, false))), " 98%");
-        assert_eq!(microphone(Some(&snapshot(98, true))), " 98%");
+        assert_eq!(microphone(None), Status::default());
+        assert_eq!(
+            microphone(Some(&snapshot(98, false))),
+            Status::new("", "98%")
+        );
+        assert_eq!(
+            microphone(Some(&snapshot(98, true))),
+            Status::new("", "98%")
+        );
     }
 
     #[test]
@@ -198,10 +234,10 @@ mod tests {
             cpu_percentage: 12.4,
         };
 
-        assert_eq!(memory(None), "");
-        assert_eq!(cpu(None), "");
-        assert_eq!(memory(Some(&snapshot)), " 5.5GB");
-        assert_eq!(cpu(Some(&snapshot)), " 12%");
+        assert_eq!(memory(None), Status::default());
+        assert_eq!(cpu(None), Status::default());
+        assert_eq!(memory(Some(&snapshot)), Status::new("", "5.5GB"));
+        assert_eq!(cpu(Some(&snapshot)), Status::new("", "12%"));
     }
 
     #[test]
@@ -210,18 +246,24 @@ mod tests {
 
         assert_eq!(
             battery(&snapshot(battery::Status::Discharging, 100)),
-            "󰁹 100%"
+            Status::new("󰁹", "100%")
         );
         assert_eq!(
             battery(&snapshot(battery::Status::Charging, 100)),
-            "󱐋󰁹 100%"
+            Status::new("󱐋󰁹", "100%")
         );
-        assert_eq!(battery(&snapshot(battery::Status::Full, 100)), "󱐋󰁹 100%");
+        assert_eq!(
+            battery(&snapshot(battery::Status::Full, 100)),
+            Status::new("󱐋󰁹", "100%")
+        );
         assert_eq!(
             battery(&snapshot(battery::Status::NotCharging, 42)),
-            "󰁽 42%"
+            Status::new("󰁽", "42%")
         );
-        assert_eq!(battery(&snapshot(battery::Status::Charging, 9)), "󱐋󰂎 09%");
+        assert_eq!(
+            battery(&snapshot(battery::Status::Charging, 9)),
+            Status::new("󱐋󰂎", "09%")
+        );
     }
 
     #[test]
@@ -233,17 +275,50 @@ mod tests {
             microphone: None,
         };
 
-        assert_eq!(audio(Some(&snapshot(0, false, false))), " 0%");
-        assert_eq!(audio(Some(&snapshot(25, false, false))), " 25%");
-        assert_eq!(audio(Some(&snapshot(26, false, false))), " 26%");
-        assert_eq!(audio(Some(&snapshot(50, false, false))), " 50%");
-        assert_eq!(audio(Some(&snapshot(51, false, false))), " 51%");
-        assert_eq!(audio(Some(&snapshot(75, false, false))), " 75%");
-        assert_eq!(audio(Some(&snapshot(76, false, false))), " 76%");
-        assert_eq!(audio(Some(&snapshot(100, false, false))), " 100%");
-        assert_eq!(audio(Some(&snapshot(45, true, false))), "󰝟 45%");
-        assert_eq!(audio(Some(&snapshot(45, false, true))), "󰋋  45%");
-        assert_eq!(audio(Some(&snapshot(45, true, true))), "󰋋 󰝟 45%");
-        assert_eq!(audio(None), "󰝟");
+        assert_eq!(
+            audio(Some(&snapshot(0, false, false))),
+            Status::new("", "0%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(25, false, false))),
+            Status::new("", "25%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(26, false, false))),
+            Status::new("", "26%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(50, false, false))),
+            Status::new("", "50%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(51, false, false))),
+            Status::new("", "51%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(75, false, false))),
+            Status::new("", "75%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(76, false, false))),
+            Status::new("", "76%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(100, false, false))),
+            Status::new("", "100%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(45, true, false))),
+            Status::new("󰝟", "45%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(45, false, true))),
+            Status::new("󰋋 ", "45%")
+        );
+        assert_eq!(
+            audio(Some(&snapshot(45, true, true))),
+            Status::new("󰋋 󰝟", "45%")
+        );
+        assert_eq!(audio(None), Status::new("󰝟", ""));
     }
 }
