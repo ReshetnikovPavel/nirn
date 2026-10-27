@@ -14,7 +14,7 @@ pub fn clock() -> String {
 }
 
 pub fn keyboard_layout(snapshot: &niri::Keyboard) -> String {
-    snapshot.short_name.clone()
+    format!("󰌌 {}", snapshot.short_name)
 }
 
 pub fn workspace_label(workspace: &niri::Workspace) -> String {
@@ -37,9 +37,8 @@ pub fn brightness(snapshot: Option<&brightness::Snapshot>) -> String {
     };
 
     let icon = match snapshot.percentage {
-        0..=25 => "󰃝",
-        26..=50 => "󰃞",
-        51..=75 => "󰃟",
+        0..=33 => "󰃞",
+        34..=66 => "󰃟",
         _ => "󰃠",
     };
 
@@ -55,9 +54,10 @@ pub fn audio(snapshot: Option<&audio::Snapshot>) -> String {
         "󰝟"
     } else {
         match snapshot.volume {
-            0..=33 => "󰕿",
-            34..=66 => "󰖀",
-            _ => "󰕾",
+            0..=25 => "",
+            26..=50 => "",
+            51..=75 => "",
+            _ => "",
         }
     };
 
@@ -71,7 +71,7 @@ pub fn microphone(snapshot: Option<&audio::Microphone>) -> String {
         return String::new();
     };
 
-    let icon = if snapshot.muted { "󰍭" } else { "󰍬" };
+    let icon = if snapshot.muted { "" } else { "" };
 
     format!("{icon} {}%", snapshot.volume)
 }
@@ -83,7 +83,7 @@ pub fn memory(snapshot: Option<&system::Snapshot>) -> String {
 
     let gigabytes = snapshot.memory_used_bytes as f64 / 1024.0 / 1024.0 / 1024.0;
 
-    format!("󰍛 {gigabytes:.1}GB")
+    format!(" {gigabytes:.1}GB")
 }
 
 pub fn cpu(snapshot: Option<&system::Snapshot>) -> String {
@@ -91,7 +91,7 @@ pub fn cpu(snapshot: Option<&system::Snapshot>) -> String {
         return String::new();
     };
 
-    format!("󰻠 {:.0}%", snapshot.cpu_percentage)
+    format!(" {:.0}%", snapshot.cpu_percentage)
 }
 
 pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
@@ -103,39 +103,27 @@ pub fn mpris(snapshot: Option<&mpris::Snapshot>) -> String {
 pub fn battery(snapshot: &battery::Snapshot) -> String {
     let battery::Snapshot { status, percentage } = *snapshot;
 
-    let icon = if matches!(status, battery::Status::Charging) {
-        match percentage {
-            ..10 => "󰢟",
-            ..20 => "󱊤",
-            ..30 => "󰂆",
-            ..40 => "󰂇",
-            ..50 => "󰂈",
-            ..60 => "󰢝",
-            ..70 => "󰂉",
-            ..80 => "󰢞",
-            ..90 => "󰂊",
-            ..100 => "󰂋",
-            100 => "󰂅",
-            _ => unreachable!(),
-        }
+    let charging = if matches!(status, battery::Status::Charging) {
+        "󱐋"
     } else {
-        match percentage {
-            ..10 => "󰂎",
-            ..20 => "󰁺",
-            ..30 => "󰁻",
-            ..40 => "󰁼",
-            ..50 => "󰁽",
-            ..60 => "󰁾",
-            ..70 => "󰁿",
-            ..80 => "󰂀",
-            ..90 => "󰂁",
-            ..100 => "󰂂",
-            100 => "󰁹",
-            _ => unreachable!(),
-        }
+        ""
+    };
+    let icon = match percentage {
+        ..10 => "󰂎",
+        ..20 => "󰁺",
+        ..30 => "󰁻",
+        ..40 => "󰁼",
+        ..50 => "󰁽",
+        ..60 => "󰁾",
+        ..70 => "󰁿",
+        ..80 => "󰂀",
+        ..90 => "󰂁",
+        ..100 => "󰂂",
+        100 => "󰁹",
+        _ => unreachable!(),
     };
 
-    format!("{percentage:02}% {icon}")
+    format!("{charging}{icon} {percentage:02}%")
 }
 
 #[cfg(test)]
